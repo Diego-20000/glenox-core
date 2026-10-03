@@ -1,13 +1,8 @@
 # glenox-core
 
-A reference implementation of the multi-provider LLM routing engine
-behind **Glenox**, an AI chatbot product for small businesses built by
-ArtPrograms Studio. Same idea as
-[studio-analytics-core](https://github.com/Diego-20000/studio-analytics-core):
-a distilled, open-source whitepaper of a real architectural decision,
-reimplemented from scratch so it can be read and run by anyone —
-without the proprietary business logic, pricing, or credentials that
-live in the private product repo.
+A small public reference project showing how an AI product can keep serving requests when a provider fails, while respecting account plans and usage budgets.
+
+It is separate from the commercial Glenox application. Customer data, credentials, billing configuration and production integrations are intentionally outside this repository.
 
 ## The problem
 
@@ -71,17 +66,11 @@ CompletionRequest(account_id, prompt, max_tier)
   blank — invalid states fail at construction, not three call frames
   into the router.
 
-## What's illustrative, not real
+## What is deliberately simplified
 
 The credit weights, provider names, and tiers in the tests are example
 values chosen to demonstrate the mechanism — not the real pricing or
-provider lineup Glenox runs in production. The real product also layers
-on things this reference implementation intentionally omits: real
-vendor SDK integrations, WhatsApp/Gmail channel adapters, OAuth token
-encryption at rest, MercadoPago billing, and account/plan management —
-all proprietary, all left out here on purpose. What's here is the part
-that best demonstrates the engineering: a provider-agnostic fallback
-chain with auditable, credit-aware cost governance.
+provider lineup Glenox runs in production. The provider names, weights and example plans are intentionally generic. A production system would add persistent storage, real vendor adapters, secure credential handling, account administration and billing around this core.
 
 ## Running it
 
@@ -98,9 +87,10 @@ from src.providers import EchoProvider, AlwaysFailsProvider
 from src.router import CompletionRouter
 
 ledger = CreditLedger()
+router = CompletionRouter(ledger)
+router.register_account("acct-1", max_tier=ProviderTier.STANDARD)
 ledger.grant("acct-1", amount=10, reason="signup bonus")
 
-router = CompletionRouter(ledger)
 router.register(
     ProviderSpec(name="primary", tier=ProviderTier.FREE, credit_weight=1, priority=0),
     AlwaysFailsProvider("primary"),  # simulates an outage
@@ -119,3 +109,16 @@ print(ledger.balance("acct-1"))  # 8 — only charged for the provider that answ
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+
+## What the example demonstrates
+
+The sample keeps the important behavior visible without tying the project to a specific vendor:
+
+- a plan sets the highest provider tier an account can use
+- failed providers are skipped automatically
+- a successful response is charged once
+- repeated requests can carry an idempotency key
+- usage remains inspectable through the credit ledger
+
+That makes the repository useful as a compact architecture reference rather than a fake clone of a production vendor stack.
