@@ -193,3 +193,19 @@ class TestHardening:
             ledger.grant("acct-1", 0, reason="bonus")
         with pytest.raises(ValueError):
             ledger.grant("acct-1", -1, reason="bonus")
+
+
+    def test_reused_request_id_with_different_prompt_is_rejected(self) -> None:
+        router, _ = _router_with_credits(balance=10)
+        router.register(
+            ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=0),
+            EchoProvider("echo"),
+        )
+        router.route(
+            CompletionRequest(account_id="acct-1", prompt="uno", request_id="same-request")
+        )
+
+        with pytest.raises(ValueError, match="different prompt"):
+            router.route(
+                CompletionRequest(account_id="acct-1", prompt="dos", request_id="same-request")
+            )
