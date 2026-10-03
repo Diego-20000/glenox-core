@@ -11,6 +11,7 @@ from .exceptions import (
     GlenoxCoreError,
     InsufficientCreditsError,
     ProviderError,
+    UnknownAccountError,
 )
 from .models import CompletionRequest, CompletionResult, CreditLedgerEntry, ProviderSpec, ProviderTier
 from .providers import AlwaysFailsProvider, CompletionProvider, EchoProvider, UnreliableProvider
@@ -34,4 +35,5 @@ __all__ = [
     "AllProvidersExhaustedError",
     "InsufficientCreditsError",
     "ProviderError",
+    "UnknownAccountError",
 ]
