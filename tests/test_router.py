@@ -16,7 +16,9 @@ from src.router import CompletionRouter
 def _router_with_credits(balance: int = 100) -> tuple[CompletionRouter, CreditLedger]:
     ledger = CreditLedger()
     ledger.grant("acct-1", balance, reason="signup bonus")
-    return CompletionRouter(ledger), ledger
+    router = CompletionRouter(ledger)
+    router.register_account("acct-1", ProviderTier.PREMIUM)
+    return router, ledger
 
 
 class TestHappyPath:
@@ -59,7 +61,7 @@ class TestFallback:
             ProviderSpec(name="unreliable", tier=ProviderTier.FREE, credit_weight=1, priority=0),
             UnreliableProvider("unreliable", fail_times=2),
         )
-        request = CompletionRequest(account_id="acct-1", prompt="hola")
+        request = CompletionRequest(account_id="acct-1", prompt="hola", request_id="req-1")
 
         # Same provider instance across calls: first two fail (simulated
         # transient outage), the third succeeds once it "recovers".
@@ -146,3 +148,49 @@ class TestModelValidation:
     def test_provider_spec_requires_positive_weight(self) -> None:
         with pytest.raises(ValidationError):
             ProviderSpec(name="x", tier=ProviderTier.FREE, credit_weight=0, priority=0)
+
+
+class TestHardening:
+    def test_request_cannot_use_an_unregistered_account(self) -> None:
+        ledger = CreditLedger()
+        router = CompletionRouter(ledger)
+        router.register(
+            ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=0),
+            EchoProvider("echo"),
+        )
+        from src.exceptions import UnknownAccountError
+
+        with pytest.raises(UnknownAccountError):
+            router.route(CompletionRequest(account_id="acct-404", prompt="hola"))
+
+    def test_duplicate_provider_names_are_rejected(self) -> None:
+        router, _ = _router_with_credits()
+        router.register(
+            ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=0),
+            EchoProvider("echo"),
+        )
+        with pytest.raises(ValueError, match="already registered"):
+            router.register(
+                ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=1),
+                EchoProvider("echo-2"),
+            )
+
+    def test_repeated_request_id_does_not_charge_twice(self) -> None:
+        router, ledger = _router_with_credits(balance=10)
+        router.register(
+            ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=0),
+            EchoProvider("echo"),
+        )
+        request = CompletionRequest(account_id="acct-1", prompt="hola", request_id="same-request")
+        first = router.route(request)
+        second = router.route(request)
+
+        assert first == second
+        assert ledger.balance("acct-1") == 9
+
+    def test_grant_rejects_zero_or_negative_amount(self) -> None:
+        ledger = CreditLedger()
+        with pytest.raises(ValueError):
+            ledger.grant("acct-1", 0, reason="bonus")
+        with pytest.raises(ValueError):
+            ledger.grant("acct-1", -1, reason="bonus")
