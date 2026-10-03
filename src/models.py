@@ -1,10 +1,4 @@
-"""Typed data contracts for the multi-provider completion engine.
-
-The numbers here (weights, credit balances) are illustrative — the point
-of this module is the *shape* of the contract (a provider has a name, a
-tier, and a cost weight; a request carries an account and a tier ceiling),
-not any real pricing.
-"""
+"""Public data contracts for the routing engine."""
 
 from __future__ import annotations
 
@@ -14,18 +8,12 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ProviderTier(str, Enum):
-    """Providers are grouped into tiers so an account's plan determines
-    which tiers it's allowed to draw from — a free-tier account never
-    silently incurs a premium-tier cost."""
-
     FREE = "free"
     STANDARD = "standard"
     PREMIUM = "premium"
 
 
 class ProviderSpec(BaseModel):
-    """Static configuration for one completion provider."""
-
     name: str
     tier: ProviderTier
     credit_weight: int = Field(gt=0, description="Credits consumed per successful call.")
@@ -33,42 +21,56 @@ class ProviderSpec(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def name_must_not_be_blank(cls, v: str) -> str:
-        if not v.strip():
+    def name_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
             raise ValueError("provider name must not be blank")
-        return v
+        return value
 
 
 class CompletionRequest(BaseModel):
-    """A single inbound request to route to some provider."""
-
     account_id: str
     prompt: str
-    max_tier: ProviderTier = ProviderTier.PREMIUM
+    request_id: str | None = None
 
-    @field_validator("prompt")
+    @field_validator("account_id", "prompt", "request_id")
     @classmethod
-    def prompt_must_not_be_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("prompt must not be blank")
-        return v
+    def strings_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+        return value
 
 
 class CompletionResult(BaseModel):
-    """What the router returns on success: the answer plus which
-    provider actually served it and what it cost, for auditability."""
-
+    request_id: str | None
     text: str
     served_by: str
     credits_charged: int
-    attempts: list[str] = Field(default_factory=list, description="Providers tried before this one, in order.")
+    attempts: list[str] = Field(
+        default_factory=list,
+        description="Providers tried before success.",
+    )
 
 
 class CreditLedgerEntry(BaseModel):
-    """One row in an append-only ledger — balances are always derived by
-    summing entries, never mutated in place, so a balance can always be
-    reconstructed and audited from history alone."""
-
     account_id: str
     delta: int
     reason: str
+
+    @field_validator("account_id", "reason")
+    @classmethod
+    def text_fields_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("text field must not be blank")
+        return value
+
+    @field_validator("delta")
+    @classmethod
+    def delta_must_not_be_zero(cls, value: int) -> int:
+        if value == 0:
+            raise ValueError("ledger delta must not be zero")
+        return value

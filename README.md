@@ -1,37 +1,31 @@
 # glenox-core
 
-A reference implementation of the multi-provider LLM routing engine
-behind **Glenox**, an AI chatbot product for small businesses built by
-ArtPrograms Studio. Same idea as
-[studio-analytics-core](https://github.com/Diego-20000/studio-analytics-core):
-a distilled, open-source whitepaper of a real architectural decision,
-reimplemented from scratch so it can be read and run by anyone —
-without the proprietary business logic, pricing, or credentials that
-live in the private product repo.
+A small public reference project showing how an AI product can keep serving requests when a provider fails, while respecting account plans and usage budgets.
+
+This is a **companion reference to Glenox**, not another product or a second implementation of the application. The main product lives in [Diego-20000/glenox](https://github.com/Diego-20000/glenox). The commercial source distribution is published separately in [Diego-20000/compra-glenox](https://github.com/Diego-20000/compra-glenox). The older [artprograms-studio](https://github.com/Diego-20000/artprograms-studio) repository is the historical monorepo from which Glenox was extracted.
+
+The code here is intentionally much smaller than Glenox itself: it isolates one architectural idea so it can be read and tested on its own. Customer data, credentials, billing configuration and production integrations are intentionally outside this repository.
 
 ## The problem
 
 A chatbot product backed by a single LLM provider has two failure modes
 that show up the moment it has real traffic:
 
-1. **The provider goes down or rate-limits you**, and every user gets an
-   error, at the worst possible moment — mid-conversation.
+1. **The provider goes down or rate-limits you**, and every user gets an error at the worst possible moment.
 2. **Every request costs the same to serve**, regardless of the account's
    plan or the query's complexity, so there's no way to offer a free
    tier without either subsidizing it into the ground or overengineering
    a separate cheap-and-nasty free product.
 
-Glenox's answer to both: never talk to a provider directly. Route every
+The reference engine's answer to both: never talk to a provider directly. Route every
 request through an engine that tries an *ordered chain* of providers —
 cheapest and most permissive first — skips whatever the account can't
-currently afford, and falls through automatically on failure. A
-account's plan determines the ceiling of providers it can reach, not a
-hardcoded model name anywhere in the request path.
+currently afford, and falls through automatically on failure. An account plan determines the ceiling of providers it can reach, instead of letting the request choose an unrestricted model.
 
 ## The architecture
 
 ```
-CompletionRequest(account_id, prompt, max_tier)
+CompletionRequest(account_id, prompt, request_id?)
               │
               ▼
      ┌─────────────────┐
@@ -61,8 +55,7 @@ CompletionRequest(account_id, prompt, max_tier)
   duplicate row in an inspectable history, instead of an untraceable
   off-by-one in some counter.
 - **`src/router.py`** — the actual fallback loop: for each candidate
-  provider (filtered by the request's tier ceiling, ordered by tier
-  then priority), check the account can afford it, try it, and on
+  provider (filtered by the account plan, ordered by tier then priority), check the account can afford it, try it, and on
   `ProviderError` move to the next one. Every attempt — including the
   failed ones — comes back on the result so a caller can see exactly
   what happened, not just who ultimately answered.
@@ -71,17 +64,9 @@ CompletionRequest(account_id, prompt, max_tier)
   blank — invalid states fail at construction, not three call frames
   into the router.
 
-## What's illustrative, not real
+## What is deliberately simplified
 
-The credit weights, provider names, and tiers in the tests are example
-values chosen to demonstrate the mechanism — not the real pricing or
-provider lineup Glenox runs in production. The real product also layers
-on things this reference implementation intentionally omits: real
-vendor SDK integrations, WhatsApp/Gmail channel adapters, OAuth token
-encryption at rest, MercadoPago billing, and account/plan management —
-all proprietary, all left out here on purpose. What's here is the part
-that best demonstrates the engineering: a provider-agnostic fallback
-chain with auditable, credit-aware cost governance.
+The credit weights, provider names and example plans are intentionally generic. They exist to make the fallback and budget rules easy to inspect. A production system would add persistent storage, real vendor adapters, secure credential handling, account administration and billing around this core.
 
 ## Running it
 
@@ -98,9 +83,10 @@ from src.providers import EchoProvider, AlwaysFailsProvider
 from src.router import CompletionRouter
 
 ledger = CreditLedger()
+router = CompletionRouter(ledger)
+router.register_account("acct-1", max_tier=ProviderTier.STANDARD)
 ledger.grant("acct-1", amount=10, reason="signup bonus")
 
-router = CompletionRouter(ledger)
 router.register(
     ProviderSpec(name="primary", tier=ProviderTier.FREE, credit_weight=1, priority=0),
     AlwaysFailsProvider("primary"),  # simulates an outage
@@ -113,8 +99,20 @@ router.register(
 result = router.route(CompletionRequest(account_id="acct-1", prompt="hola"))
 print(result.served_by)      # "backup"
 print(result.attempts)       # ["primary"]
-print(ledger.balance("acct-1"))  # 8 — only charged for the provider that answered
+print(ledger.balance("acct-1"))  # 8
 ```
+
+## What the example demonstrates
+
+The sample keeps the important behavior visible without tying the project to a specific vendor:
+
+- a plan sets the highest provider tier an account can use
+- failed providers are skipped automatically
+- a successful response is charged once
+- repeated requests can carry an idempotency key
+- usage remains inspectable through the credit ledger
+
+That makes the repository useful as a compact architecture reference rather than a copy of the production application.
 
 ## License
 
