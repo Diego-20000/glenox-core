@@ -9,8 +9,7 @@ It is separate from the commercial Glenox application. Customer data, credential
 A chatbot product backed by a single LLM provider has two failure modes
 that show up the moment it has real traffic:
 
-1. **The provider goes down or rate-limits you**, and every user gets an
-   error, at the worst possible moment — mid-conversation.
+1. **The provider goes down or rate-limits you**, and every user gets an error at the worst possible moment.
 2. **Every request costs the same to serve**, regardless of the account's
    plan or the query's complexity, so there's no way to offer a free
    tier without either subsidizing it into the ground or overengineering
@@ -19,14 +18,12 @@ that show up the moment it has real traffic:
 Glenox's answer to both: never talk to a provider directly. Route every
 request through an engine that tries an *ordered chain* of providers —
 cheapest and most permissive first — skips whatever the account can't
-currently afford, and falls through automatically on failure. A
-account's plan determines the ceiling of providers it can reach, not a
-hardcoded model name anywhere in the request path.
+currently afford, and falls through automatically on failure. An account plan determines the ceiling of providers it can reach, instead of letting the request choose an unrestricted model.
 
 ## The architecture
 
 ```
-CompletionRequest(account_id, prompt, max_tier)
+CompletionRequest(account_id, prompt, request_id?)
               │
               ▼
      ┌─────────────────┐
@@ -56,8 +53,7 @@ CompletionRequest(account_id, prompt, max_tier)
   duplicate row in an inspectable history, instead of an untraceable
   off-by-one in some counter.
 - **`src/router.py`** — the actual fallback loop: for each candidate
-  provider (filtered by the request's tier ceiling, ordered by tier
-  then priority), check the account can afford it, try it, and on
+  provider (filtered by the account plan, ordered by tier then priority), check the account can afford it, try it, and on
   `ProviderError` move to the next one. Every attempt — including the
   failed ones — comes back on the result so a caller can see exactly
   what happened, not just who ultimately answered.
@@ -68,9 +64,7 @@ CompletionRequest(account_id, prompt, max_tier)
 
 ## What is deliberately simplified
 
-The credit weights, provider names, and tiers in the tests are example
-values chosen to demonstrate the mechanism — not the real pricing or
-provider lineup Glenox runs in production. The provider names, weights and example plans are intentionally generic. A production system would add persistent storage, real vendor adapters, secure credential handling, account administration and billing around this core.
+The credit weights, provider names and example plans are intentionally generic. They exist to make the fallback and budget rules easy to inspect. A production system would add persistent storage, real vendor adapters, secure credential handling, account administration and billing around this core.
 
 ## Running it
 
@@ -103,7 +97,7 @@ router.register(
 result = router.route(CompletionRequest(account_id="acct-1", prompt="hola"))
 print(result.served_by)      # "backup"
 print(result.attempts)       # ["primary"]
-print(ledger.balance("acct-1"))  # 8 — only charged for the provider that answered
+print(ledger.balance("acct-1"))  # 8
 ```
 
 ## License
