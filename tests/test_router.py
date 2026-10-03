@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.credits import CreditLedger
-from src.exceptions import AllProvidersExhaustedError, InsufficientCreditsError
+from src.exceptions import AllProvidersExhaustedError, InsufficientCreditsError, UnknownAccountError
 from src.models import CompletionRequest, ProviderSpec, ProviderTier
 from src.providers import AlwaysFailsProvider, EchoProvider, UnreliableProvider
 from src.router import CompletionRouter
@@ -115,9 +115,10 @@ class TestCreditGovernance:
             ProviderSpec(name="premium-only", tier=ProviderTier.PREMIUM, credit_weight=1, priority=0),
             EchoProvider("premium-only"),
         )
+        router.register_account("acct-1", ProviderTier.FREE)
 
         with pytest.raises(AllProvidersExhaustedError) as excinfo:
-            router.route(CompletionRequest(account_id="acct-1", prompt="hola", max_tier=ProviderTier.FREE))
+            router.route(CompletionRequest(account_id="acct-1", prompt="hola"))
 
         assert excinfo.value.attempted == []  # never even considered — filtered before the loop
 
@@ -158,8 +159,6 @@ class TestHardening:
             ProviderSpec(name="echo", tier=ProviderTier.FREE, credit_weight=1, priority=0),
             EchoProvider("echo"),
         )
-        from src.exceptions import UnknownAccountError
-
         with pytest.raises(UnknownAccountError):
             router.route(CompletionRequest(account_id="acct-404", prompt="hola"))
 
