@@ -24,7 +24,7 @@ class CompletionRouter:
         self._impls: dict[str, CompletionProvider] = {}
         self._account_tiers: dict[str, ProviderTier] = {}
         self._account_locks: defaultdict[str, Lock] = defaultdict(Lock)
-        self._idempotency_cache: dict[tuple[str, str], CompletionResult] = {}
+        self._idempotency_cache: dict[tuple[str, str], tuple[str, CompletionResult]] = {}
 
     def register_account(self, account_id: str, max_tier: ProviderTier) -> None:
         account_id = account_id.strip()
@@ -54,7 +54,10 @@ class CompletionRouter:
                 cache_key = (request.account_id, request.request_id)
                 cached = self._idempotency_cache.get(cache_key)
                 if cached is not None:
-                    return cached.model_copy(deep=True)
+                    cached_prompt, cached_result = cached
+                    if cached_prompt != request.prompt:
+                        raise ValueError("request_id was already used with a different prompt")
+                    return cached_result.model_copy(deep=True)
 
             attempted: list[str] = []
             reasons: list[str] = []
@@ -85,7 +88,7 @@ class CompletionRouter:
                     attempts=list(attempted),
                 )
                 if cache_key is not None:
-                    self._idempotency_cache[cache_key] = result
+                    self._idempotency_cache[cache_key] = (request.prompt, result)
                 return result
 
         raise AllProvidersExhaustedError(attempted, reasons)
