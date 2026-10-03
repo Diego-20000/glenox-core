@@ -17,7 +17,7 @@ that show up the moment it has real traffic:
    tier without either subsidizing it into the ground or overengineering
    a separate cheap-and-nasty free product.
 
-Glenox's answer to both: never talk to a provider directly. Route every
+The reference engine's answer to both: never talk to a provider directly. Route every
 request through an engine that tries an *ordered chain* of providers —
 cheapest and most permissive first — skips whatever the account can't
 currently afford, and falls through automatically on failure. An account plan determines the ceiling of providers it can reach, instead of letting the request choose an unrestricted model.
@@ -102,11 +102,6 @@ print(result.attempts)       # ["primary"]
 print(ledger.balance("acct-1"))  # 8
 ```
 
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-
 ## What the example demonstrates
 
 The sample keeps the important behavior visible without tying the project to a specific vendor:
@@ -117,4 +112,8 @@ The sample keeps the important behavior visible without tying the project to a s
 - repeated requests can carry an idempotency key
 - usage remains inspectable through the credit ledger
 
-That makes the repository useful as a compact architecture reference rather than a fake clone of a production vendor stack.
+That makes the repository useful as a compact architecture reference rather than a copy of the production application.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
