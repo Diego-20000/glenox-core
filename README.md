@@ -2,7 +2,9 @@
 
 A small public reference project showing how an AI product can keep serving requests when a provider fails, while respecting account plans and usage budgets.
 
-It is separate from the commercial Glenox application. Customer data, credentials, billing configuration and production integrations are intentionally outside this repository.
+This is a **companion reference to Glenox**, not another product or a second implementation of the application. The main product lives in [Diego-20000/glenox](https://github.com/Diego-20000/glenox). The commercial source distribution is published separately in [Diego-20000/compra-glenox](https://github.com/Diego-20000/compra-glenox). The older [artprograms-studio](https://github.com/Diego-20000/artprograms-studio) repository is the historical monorepo from which Glenox was extracted.
+
+The code here is intentionally much smaller than Glenox itself: it isolates one architectural idea so it can be read and tested on its own. Customer data, credentials, billing configuration and production integrations are intentionally outside this repository.
 
 ## The problem
 
